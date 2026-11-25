@@ -66,14 +66,10 @@ class Component {
 export default class TTFGlyph extends Glyph {
   type = 'TTF';
 
-  // Parses just the glyph header and returns the bounding box
-  _getCBox(internal) {
-    // We need to decode the glyph if variation processing is requested,
-    // so it's easier just to recompute the path's cbox after decoding.
-    if (this._font._variationProcessor && !internal) {
-      return this.path.cbox;
-    }
-
+  // Returns the box around the glyph's points, as the glyph header stores it.
+  // While decoding, the path is still being built, so asking it for a box
+  // would recurse; only the header is available then.
+  _getHeaderCBox() {
     let glyfPos = this._font.loca.offsets[this.id];
     let nextPos = this._font.loca.offsets[this.id + 1];
 
@@ -88,6 +84,18 @@ export default class TTFGlyph extends Glyph {
 
     let cbox = new BBox(glyph.xMin, glyph.yMin, glyph.xMax, glyph.yMax);
     return Object.freeze(cbox);
+  }
+
+  _getCBox(internal) {
+    // The control box is the box around the points the path is drawn from,
+    // control points included. Computing it from the path, rather than from
+    // the header, keeps it with the outline: the two agree, and a change to
+    // how the outline is decoded moves both boxes.
+    if (internal) {
+      return this._getHeaderCBox();
+    }
+
+    return this.path.cbox;
   }
 
   // Parses a single glyph coordinate

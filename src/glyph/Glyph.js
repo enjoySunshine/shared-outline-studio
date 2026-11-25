@@ -211,8 +211,6 @@ export default class Glyph {
 }
 
 cache(Glyph, {
-  cbox: 'once',
-  bbox: 'once',
   path: 'once',
   advanceWidth: 'once',
   advanceHeight: 'once',

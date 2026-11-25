@@ -38,13 +38,18 @@ export default class WOFF2Glyph extends TTFGlyph {
     // What a variation starts from is the box in the glyph's header, as it
     // is for a TTFGlyph. The path's own would be the varied glyph's, and
     // decoding that is what is asking.
-    if (internal && this._font._variationProcessor) {
+    if (internal) {
       let glyph = this._font._transformedGlyphs[this.id];
-      return Object.freeze(
-        new BBox(glyph.xMin, glyph.yMin, glyph.xMax, glyph.yMax),
-      );
+      if (glyph) {
+        return Object.freeze(
+          new BBox(glyph.xMin, glyph.yMin, glyph.xMax, glyph.yMax),
+        );
+      }
     }
 
-    return this.path.bbox;
+    // As for any other glyph, the control box is the path's own: the box
+    // around the points, control points included. Returning the tight box
+    // here would make the two boxes the same one.
+    return this.path.cbox;
   }
 }

@@ -426,6 +426,112 @@ describe('glyphs', function () {
       assert.equal(glyph.bbox.maxX, 564);
       assert.equal(glyph.bbox.maxY, 656);
     });
+
+    it('should keep the control box and the tight box apart', function () {
+      // The lira's outline has a control point at y = -14, and the quadratic
+      // curve it controls dips only to y = -12.0546875. The control box takes
+      // in the point; the tight box hugs the drawn curve. They are two boxes.
+      let lira = font.glyphForCodePoint(0x20ba);
+      assert.deepEqual(
+        [lira.cbox.minX, lira.cbox.minY, lira.cbox.maxX, lira.cbox.maxY],
+        [15, -14, 465, 638],
+      );
+      assert.deepEqual(
+        [lira.bbox.minX, lira.bbox.minY, lira.bbox.maxX, lira.bbox.maxY],
+        [15, -12.0546875, 465, 638],
+      );
+    });
+
+    it('should give the same boxes as the true-type copy of the outline', function () {
+      let woff = fontkit.openSync(
+        new URL(
+          'data/SourceSansPro/SourceSansPro-Regular.ttf.woff',
+          import.meta.url,
+        ),
+      );
+
+      for (let [codePoint, expected] of [
+        [0x44, [90, 0, 564, 656]],
+        [0x6f, [46, -12, 496, 498]],
+        [0x69, [69, 0, 179, 694]],
+        [0x6a, [-40, -217, 178, 694]],
+      ]) {
+        for (let copy of [font, woff]) {
+          let glyph = copy.glyphForCodePoint(codePoint);
+          assert.equal(
+            glyph.path.toSVG(),
+            woff.glyphForCodePoint(codePoint).path.toSVG(),
+          );
+          assert.deepEqual(
+            [
+              glyph.cbox.minX,
+              glyph.cbox.minY,
+              glyph.cbox.maxX,
+              glyph.cbox.maxY,
+            ],
+            expected,
+          );
+          assert.deepEqual(
+            [
+              glyph.bbox.minX,
+              glyph.bbox.minY,
+              glyph.bbox.maxX,
+              glyph.bbox.maxY,
+            ],
+            expected,
+          );
+        }
+      }
+    });
+
+    it('should measure a line from the same boxes as its glyphs', function () {
+      let run = font.layout('Do');
+      assert.deepEqual(
+        [run.bbox.minX, run.bbox.minY, run.bbox.maxX, run.bbox.maxY],
+        [90, -12, 1111, 656],
+      );
+      assert.equal(run.advanceWidth, 1157);
+      assert.equal(run.glyphs[1].bbox.minY, -12);
+    });
+
+    it('should follow the outline when it is decoded again', function () {
+      // The boxes are read from the outline, not stored beside it: decode the
+      // glyph with one of its points moved, and both boxes, and the line the
+      // glyph is set in, move with it. Nothing keeps a box of its own.
+      let open = () =>
+        fontkit.openSync(
+          new URL(
+            'data/SourceSansPro/SourceSansPro-Regular.ttf.woff2',
+            import.meta.url,
+          ),
+        );
+
+      let original = open();
+      let originalGlyph = original.glyphForCodePoint(0x20ba);
+      assert.deepEqual(
+        [originalGlyph.cbox.minY, originalGlyph.bbox.minY],
+        [-14, -12.0546875],
+      );
+      assert.equal(original.layout('₺').bbox.minY, -12.0546875);
+
+      // A decoder that rounds or splits the curve differently decodes the
+      // glyph again: move the low control point before the glyph is built.
+      let changed = open();
+      let glyph = changed.glyphForCodePoint(0x20ba);
+
+      // WOFF2 decodes the glyph data once, when the glyph is first asked for;
+      // its path, and the boxes read from it, come later. Move the low control
+      // point before the path is built, as a different decoder would.
+      let decoded = changed._transformedGlyphs[glyph.id];
+      let lowest = decoded.points.reduce((low, point) =>
+        point.y < low.y ? point : low,
+      );
+      lowest.y = -20;
+
+      assert.equal(glyph.cbox.minY, -20);
+      assert.ok(glyph.bbox.minY > -20 && glyph.bbox.minY < -12.0546875);
+      assert.equal(changed.layout('₺').bbox.minY, glyph.bbox.minY);
+    });
   });
 
   describe('WOFF2 otf glyph', function () {
